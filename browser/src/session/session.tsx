@@ -43,6 +43,8 @@ import type {
 } from "shared";
 import { bundledAsset } from "../assets";
 import { CopyOnSelect, Grab, reactGrabPreloadPath } from "../grab/grab";
+import type { GrabRegion } from "../grab/grab";
+import { grabScreenshot } from "../grab/screenshot";
 import { AgentPaneFinder } from "../grab/target";
 import type { EmbeddedAgent } from "../grab/target";
 import type { ZoomDirection } from "../zoom";
@@ -1202,7 +1204,7 @@ class Session {
     let grab = this.grabs.get(tab.id);
     if (!grab) {
       grab = new Grab(handle, {
-        selected: (content) => void this.sendGrab(content),
+        selected: (content, region) => void this.sendGrab(handle, content, region),
         changed: () => this.render(),
       });
       this.grabs.set(tab.id, grab);
@@ -1226,11 +1228,13 @@ class Session {
     }
   }
 
-  private async sendGrab(content: string) {
-    this.root?.setClipboard(content);
+  private async sendGrab(handle: WebViewHandle, content: string, region: GrabRegion | null) {
+    const screenshot = region ? await grabScreenshot(handle, region, content, handle.state.url) : null;
+    if (screenshot) await screenshot.copyWithText().catch(() => this.root?.setClipboard(content));
+    else this.root?.setClipboard(content);
     try {
-      const target = await this.agentPanes.send(content);
-      this.showToast(target ? "Sent to agent" : "Copied to clipboard", "done");
+      const delivery = await this.agentPanes.send(content, screenshot);
+      this.showToast(delivery ? "Sent to agent" : "Copied to clipboard", "done");
     } catch (error) {
       this.showToast(error instanceof Error ? error.message : String(error), "failed");
     }
@@ -1608,11 +1612,11 @@ function rememberUrl(url: string) {
 function embeddedAgent(url: string | undefined, token: string | undefined): EmbeddedAgent | null {
   if (!url) return null;
   return {
-    async send(content) {
+    async send(content, screenshot) {
       const response = await fetch(`${url.replace(/\/$/, "")}/agent-text`, {
         method: "POST",
         headers: { "content-type": "application/json", ...(token ? { authorization: `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ text: content }),
+        body: JSON.stringify({ text: content, screenshot }),
       });
       return response.ok;
     },

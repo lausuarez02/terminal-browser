@@ -49,6 +49,16 @@ for (const file of fs.readdirSync(FIXTURES)) {
     await terminal.split(expect.split.request);
     assert.deepEqual(commands, expect.split.commands);
   });
+
+  if (expect.pasteKey) {
+    test(`${expect.name}: presses ctrl+v as a key, never as pasted text`, async () => {
+      const { run, commands } = recorder({ ...exec, ...Object.fromEntries(expect.pasteKey.commands.map((c) => [c, ""])) });
+      const terminal = detect(env, run);
+      await terminal.pasteKey(expect.currentPane.id);
+      assert.deepEqual(commands, expect.pasteKey.commands);
+      assert.ok(commands.every((command) => !command.includes("\x1b[200~")));
+    });
+  }
 }
 
 test("an unknown terminal is nobody", () => {
