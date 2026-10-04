@@ -452,9 +452,7 @@ async function recordCommand(
   let timeoutMs: number | undefined;
   if (sub === "start") {
     if (!timeout) {
-      fail(
-        `record start needs --timeout <seconds>, so a recording nobody stops cannot fill the disk\n\n${RECORD_USAGE}`,
-      );
+      fail(`record start requires --timeout <seconds>\n\n${RECORD_USAGE}`);
     }
     const seconds = Number(timeout);
     if (!Number.isFinite(seconds) || seconds <= 0) {
@@ -472,9 +470,10 @@ async function recordCommand(
     : found.filter((browser) => browser.inCurrentTab);
   const list = (browsers: Browser[]) => browsers.map((browser) => `  ${describe(browser)}`).join("\n");
   if (here.length === 0) {
+    if (found.length === 0) fail("no browser running. Start one with: terminal-browser open <url>");
     fail(
-      found.length === 0
-        ? "no browser running. Start one with: terminal-browser open <url>"
+      key
+        ? `no browser ${key}. Running:\n${list(found)}`
         : `no browser to record in this tab. Running:\n${list(found)}`,
     );
   }
@@ -487,9 +486,9 @@ async function recordCommand(
     ...(timeoutMs === undefined ? {} : { timeoutMs }),
   })) as { recording?: boolean; manifest?: string };
 
-  if (sub === "stop") console.log(reply.manifest ?? "");
-  else if (sub === "status") console.log(reply.recording ? "recording" : "idle");
-  else console.log("recording");
+  if (sub === "stop") process.stdout.write(`${reply.manifest}\n`);
+  else if (sub === "status") process.stdout.write(reply.recording ? "recording\n" : "idle\n");
+  else process.stdout.write("recording\n");
   return 0;
 }
 
@@ -780,6 +779,7 @@ async function main(): Promise<number> {
   if (command === "unregister-app") return unregisterAppCommand(args);
   if (command === "apps") return appsCommand(args);
   if (command === "record") {
+    requirePaneAccess();
     const key = takeFlag(args, "--browser");
     const timeout = takeFlag(args, "--timeout");
     return recordCommand(

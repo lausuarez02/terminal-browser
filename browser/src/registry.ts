@@ -35,7 +35,7 @@ export interface ControlHost {
   agentTouch(id: number): boolean;
   agentRelease(): void;
   recordStart(timeoutMs: number): Promise<boolean>;
-  recordStop(): string | null;
+  recordStop(): string | "empty" | null;
   recording(): boolean;
   tabs(): unknown;
   targets(): Promise<unknown>;
@@ -207,6 +207,7 @@ export class Registry {
       case "record-stop": {
         const manifest = this.host.recordStop();
         if (manifest === null) throw new Error("not recording");
+        if (manifest === "empty") throw new Error("nothing was captured");
         return { recording: false, manifest };
       }
       case "record-status":

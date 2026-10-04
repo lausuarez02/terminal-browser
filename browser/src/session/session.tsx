@@ -256,6 +256,8 @@ class Session {
   private profiling = false;
   private toastTimer: ReturnType<typeof setTimeout> | null = null;
   private records = new Map<number, RecordSession>();
+  private agentRecordTab: number | null = null;
+  private agentRecordManifest: string | null = null;
   private grabs = new Map<number, Grab>();
   private copyWatchers = new Map<number, CopyOnSelect>();
   private readonly copyOnSelect: boolean;
@@ -400,11 +402,26 @@ class Session {
       agentTouch: (id) => this.tabs.touchAgentControl(id),
       agentRelease: () => this.tabs.releaseAgentControl(),
       recordStart: async (timeoutMs: number) => {
+        const tab = this.tabs.active?.id ?? null;
         await this.startRecording({ agent: true, timeoutMs });
-        return this.activeRecord() !== null;
+        const started = tab !== null && this.records.has(tab);
+        this.agentRecordTab = started ? tab : null;
+        this.agentRecordManifest = null;
+        return started;
       },
-      recordStop: () => this.activeRecord()?.complete() ?? null,
-      recording: () => this.activeRecord() !== null,
+      recordStop: () => {
+        const session = this.agentRecord();
+        if (!session) {
+          const done = this.agentRecordManifest;
+          this.agentRecordManifest = null;
+          return done;
+        }
+        const manifest = session.complete();
+        this.agentRecordTab = null;
+        if (typeof manifest === "string") this.agentRecordManifest = null;
+        return manifest;
+      },
+      recording: () => this.agentRecord() !== null,
       viewport: () =>
         this.root ? { width: this.root.info.width, height: this.root.info.height } : null,
       tabs: () => this.tabs.registryView(),
@@ -556,7 +573,7 @@ class Session {
         devtools={this.devtoolsView()}
         profiling={this.profiling}
         grabActive={this.activeGrab()?.active ?? false}
-        agentRecording={this.activeRecord()?.agent ?? false}
+        agentRecording={this.agentRecord() !== null}
       />,
     );
   }
@@ -656,6 +673,13 @@ class Session {
   }
 
   /** the record session lives with its tab; the active tab's session gets the UI and input */
+  private agentRecord(): RecordSession | null {
+    if (this.agentRecordTab === null) return null;
+    const session = this.records.get(this.agentRecordTab) ?? null;
+    if (!session) this.agentRecordTab = null;
+    return session;
+  }
+
   private activeRecord(): RecordSession | null {
     const tab = this.tabs.active;
     return tab ? this.records.get(tab.id) ?? null : null;
@@ -737,6 +761,9 @@ class Session {
           },
           setClipboard: (text) => root.setClipboard(text),
           toast: (name, state, detail) => this.showToast(name, state, detail),
+          completed: (manifestPath) => {
+            if (options.agent) this.agentRecordManifest = manifestPath;
+          },
           finished: () => {
             this.records.delete(tab.id);
             if (this.shownRecord?.target.tabId === tab.id) this.shownRecord = null;

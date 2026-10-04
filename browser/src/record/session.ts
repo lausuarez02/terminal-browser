@@ -60,6 +60,7 @@ export interface RecordHost {
   setClipboard(text: string): void;
   toast(name: string, state: "done" | "failed", detail?: string): void;
   finished(): void;
+  completed?(manifestPath: string): void;
   isRecordKey(event: EngineKeyEvent): boolean;
   recordKeyLabel(): string;
 }
@@ -172,7 +173,10 @@ export class RecordSession {
     this.host = host;
     this.target = target;
     this.agent = options.agent ?? false;
-    this.timeoutMs = options.timeoutMs ?? null;
+    this.timeoutMs =
+      options.timeoutMs === undefined
+        ? null
+        : Math.min(options.timeoutMs, MAX_RECORDING_MS);
     this.surface = host.root.createSurface();
     this.recorder = new Recorder(target, newRecordingDir(host.page().url));
     this.recorder.onCap = () => {
@@ -1002,16 +1006,17 @@ export class RecordSession {
     } catch {}
   }
 
-  complete(): string | null {
+  complete(): string | "empty" | null {
     if (this.completing) return null;
     this.pausePlayback();
-    if (!this.ensureFrames()) return null;
+    if (!this.ensureFrames()) return "empty";
     this.completing = true;
     this.commitEditing();
     const host = this.host;
     const page = host.page();
     const dir = this.recorder.dir;
     const manifestPath = writeProcessingManifest(dir, page);
+    host.completed?.(manifestPath);
     if (!this.agent) {
       host.setClipboard(manifestPath);
       host.toast("Copied to clipboard", "done", manifestPath.replace(os.homedir(), "~"));

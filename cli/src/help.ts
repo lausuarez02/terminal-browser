@@ -65,7 +65,7 @@ nothing when already up to date.
     summary: "Record the page to a video",
     usage: "terminal-browser record <start|stop|status> [options]",
     body: `
-Records the active tab and writes a video you can hand to someone.
+Records the active tab and writes a video file.
 
   start    Begin recording. Requires --timeout
   stop     Finish and encode; prints the manifest path
@@ -74,12 +74,11 @@ Records the active tab and writes a video you can hand to someone.
 The manifest names the output directory and reports encoding progress.
 video.mp4 appears there once its status reads ready.
 
-A recording started this way is marked as the agent's, so the window shows
-it is running and who began it.
+The window shows that the agent started the recording while it runs.
 
 Options:
-  --timeout <seconds>   Stop on its own after this long. Required for start,
-                        so a recording nobody stops cannot fill the disk
+  --timeout <seconds>   Stop after this long. Required for start, capped at
+                        the 10 minute recording limit
   --browser <key>       A browser key from terminal-browser ls
 
 Examples:
