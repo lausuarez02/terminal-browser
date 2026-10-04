@@ -51,7 +51,7 @@ import type { ZoomDirection } from "../zoom";
 
 
 import type { RecordTarget } from "../record/recorder";
-import { RecordSession } from "../record/session";
+import { RecordSession, type RecordOptions } from "../record/session";
 import type { RecordActions } from "../record/types";
 import { Registry } from "../registry";
 import { Chrome } from "../ui/chrome";
@@ -399,12 +399,8 @@ class Session {
       },
       agentTouch: (id) => this.tabs.touchAgentControl(id),
       agentRelease: () => this.tabs.releaseAgentControl(),
-      // The same entry point ctrl+r uses. An agent driving the browser could
-      // screenshot but never record, so a multi-step flow could only be handed
-      // back as stitched stills — losing motion, timing and anything that
-      // autoplays.
-      recordStart: async () => {
-        await this.startRecording();
+      recordStart: async (timeoutMs: number) => {
+        await this.startRecording({ agent: true, timeoutMs });
         return this.activeRecord() !== null;
       },
       recordStop: () => this.activeRecord()?.complete() ?? null,
@@ -560,6 +556,7 @@ class Session {
         devtools={this.devtoolsView()}
         profiling={this.profiling}
         grabActive={this.activeGrab()?.active ?? false}
+        agentRecording={this.activeRecord()?.agent ?? false}
       />,
     );
   }
@@ -711,7 +708,7 @@ class Session {
     };
   }
 
-  private async startRecording() {
+  private async startRecording(options: RecordOptions = {}) {
     if (this.recordStarting) return;
     const tab = this.tabs.active;
     if (!tab || !tab.ref.current || !this.root || this.records.has(tab.id)) return;
@@ -749,6 +746,7 @@ class Session {
           recordKeyLabel: () => this.keymap.label("record.toggle"),
         },
         this.recordTarget(tab),
+        options,
       );
       this.records.set(tab.id, session);
     } catch (error) {
@@ -1264,7 +1262,11 @@ class Session {
     return [
       {
         id: "record",
-        label: this.activeRecord() ? "Complete recording" : "Record",
+        label: this.activeRecord()
+          ? this.activeRecord()?.agent
+            ? "Stop agent recording"
+            : "Complete recording"
+          : "Record",
         enabled: true,
         shortcut: this.activeRecord() ? "" : this.keymap.label("record.toggle"),
         icon: { kind: "path", d: ICONS.record, tint: "red", weight: 8 },
@@ -1527,6 +1529,7 @@ class Session {
       case "record.toggle": {
         const record = this.activeRecord();
         if (!record) return "Record page";
+        if (record.agent) return "Stop agent recording";
         return record.reviewing ? "Complete recording" : "Stop recording";
       }
       case "grab.toggle":

@@ -62,25 +62,28 @@ nothing when already up to date.
 `,
   },
   record: {
-    summary: "Record the page to an mp4",
-    usage: "terminal-browser record <start|stop|status> [--browser <key>]",
+    summary: "Record the page to a video",
+    usage: "terminal-browser record <start|stop|status> [options]",
     body: `
-Records the active tab, the same capture the record keybinding runs, from
-the command line instead of a keystroke. This is what lets an agent driving
-the browser hand back a video rather than a sequence of screenshots.
+Records the active tab and writes a video you can hand to someone.
 
-  start    Begin capturing the active tab
+  start    Begin recording. Requires --timeout
   stop     Finish and encode; prints the manifest path
-  status   Whether a capture is running
+  status   Whether a recording is running
 
-The manifest names the output directory and reports encoding progress;
+The manifest names the output directory and reports encoding progress.
 video.mp4 appears there once its status reads ready.
 
+A recording started this way is marked as the agent's, so the window shows
+it is running and who began it.
+
 Options:
-  --browser <key>     A browser key from terminal-browser ls
+  --timeout <seconds>   Stop on its own after this long. Required for start,
+                        so a recording nobody stops cannot fill the disk
+  --browser <key>       A browser key from terminal-browser ls
 
 Examples:
-  terminal-browser record start
+  terminal-browser record start --timeout 120
   terminal-browser record stop
 `,
   },

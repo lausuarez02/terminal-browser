@@ -96,6 +96,11 @@ type Gesture =
   | { type: "crop"; id: number; anchor: Vec }
   | { type: "text"; start: Vec; moved: number };
 
+export interface RecordOptions {
+  agent?: boolean;
+  timeoutMs?: number;
+}
+
 export class RecordSession {
   readonly surface: Surface;
   readonly actions: RecordActions;
@@ -148,16 +153,26 @@ export class RecordSession {
   private interactionsCache: { counts: string; events: RecordInteraction[] } | null = null;
   private sampleTimes: number[] | null = null;
   private toolbarGrab: Vec | null = null;
+  readonly agent: boolean;
+  private readonly timeoutMs: number | null;
+  private timeoutTimer: ReturnType<typeof setTimeout> | null = null;
 
-  static async create(host: RecordHost, target: RecordTarget): Promise<RecordSession> {
-    const session = new RecordSession(host, target);
+  static async create(
+    host: RecordHost,
+    target: RecordTarget,
+    options: RecordOptions = {},
+  ): Promise<RecordSession> {
+    const session = new RecordSession(host, target, options);
     await session.recorder.start();
+    session.armTimeout();
     return session;
   }
 
-  private constructor(host: RecordHost, target: RecordTarget) {
+  private constructor(host: RecordHost, target: RecordTarget, options: RecordOptions) {
     this.host = host;
     this.target = target;
+    this.agent = options.agent ?? false;
+    this.timeoutMs = options.timeoutMs ?? null;
     this.surface = host.root.createSurface();
     this.recorder = new Recorder(target, newRecordingDir(host.page().url));
     this.recorder.onCap = () => {
@@ -247,9 +262,25 @@ export class RecordSession {
     this.presentFrame();
   }
 
+  private clearTimeout() {
+    if (this.timeoutTimer) {
+      clearTimeout(this.timeoutTimer);
+      this.timeoutTimer = null;
+    }
+  }
+
+  private armTimeout() {
+    if (this.timeoutMs === null) return;
+    this.timeoutTimer = setTimeout(() => {
+      this.timeoutTimer = null;
+      if (!this.closed && !this.completing) this.complete();
+    }, this.timeoutMs);
+  }
+
   dispose() {
     if (this.closed) return;
     this.closed = true;
+    this.clearTimeout();
     this.pausePlayback();
     this.clearLiveTick();
     if (this.flashTimer) {
@@ -304,6 +335,7 @@ export class RecordSession {
       currentKey: this.scrub == null ? null : this.stateKey(),
       pageUrl: this.host.page().url,
       recordKey: this.host.recordKeyLabel(),
+      agent: this.agent,
       shots: this.shotsView(),
       shotThumb: keyframes.length > 0 ? this.thumbSurface : null,
       keyframeCount: keyframes.length,
@@ -930,6 +962,7 @@ export class RecordSession {
   }
 
   private stopCapture() {
+    this.clearTimeout();
     this.clearLiveTick();
     const wasStopped = this.recorder.stopped;
     this.recorder.stop();
@@ -969,9 +1002,6 @@ export class RecordSession {
     } catch {}
   }
 
-  /** Finish and encode. Returns the manifest path, or null when there was
-   *  nothing to write. Reaching this without a review is supported: trim,
-   *  markup and shots are simply empty. */
   complete(): string | null {
     if (this.completing) return null;
     this.pausePlayback();
@@ -982,8 +1012,10 @@ export class RecordSession {
     const page = host.page();
     const dir = this.recorder.dir;
     const manifestPath = writeProcessingManifest(dir, page);
-    host.setClipboard(manifestPath);
-    host.toast("Copied to clipboard", "done", manifestPath.replace(os.homedir(), "~"));
+    if (!this.agent) {
+      host.setClipboard(manifestPath);
+      host.toast("Copied to clipboard", "done", manifestPath.replace(os.homedir(), "~"));
+    }
     compositeRecording({
       recorder: this.recorder,
       markup: this.markup,
